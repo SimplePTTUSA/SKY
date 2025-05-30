@@ -112,13 +112,6 @@ const NEXRAD_SITES = [
 ];
 
 // Radar product WMS layer mapping
-const NEXRAD_SITES = [
-  {"id":"KABR","name":"Aberdeen, SD","lat":45.4558,"lon":-98.4131,"elevation":1302},
-  {"id":"KENX","name":"Albany, NY","lat":42.5864,"lon":-74.0639,"elevation":1826},
-  // ... (add all remaining sites from your paste.txt here) ...
-];
-
-// Radar product WMS layer mapping
 const PRODUCT_LAYERS = {
   "conus_bref_qcd": { label: "Base Reflectivity", wmsLayer: "conus_bref_qcd" },
   "conus_cref_qcd": { label: "Composite Reflectivity", wmsLayer: "conus_cref_qcd" },
