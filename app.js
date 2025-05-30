@@ -110,14 +110,6 @@ const NEXRAD_SITES = [
   {"id":"KVWX","name":"Evansville, IN","lat":37.9342,"lon":-87.265,"elevation":459},
   {"id":"KYUX","name":"Yuma, AZ","lat":32.4958,"lon":-113.9025,"elevation":239}
 ];
-
-// --- Full NEXRAD site list (abbreviated for example) ---
-const NEXRAD_SITES = [
-  {"id":"KABR","name":"Aberdeen, SD","lat":45.4558,"lon":-98.4131,"elevation":1302},
-  {"id":"KENX","name":"Albany, NY","lat":42.5864,"lon":-74.0639,"elevation":1826},
-  // ... (add all remaining sites from your paste.txt here) ...
-];
-
 // Set initial map view to full USA
 const map = L.map('map').setView([39.8283, -98.5795], 4); // Zoom 4 shows the whole US
 
