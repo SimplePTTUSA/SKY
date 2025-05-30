@@ -120,7 +120,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap contributors'
 }).addTo(map);
 
-// --- RainViewer Radar Animation (with fade and auto-refresh) ---
+// --- RainViewer Radar Animation (with cross-fade and auto-refresh) ---
 let radarLayers = [];
 let radarTimestamps = [];
 let currentFrame = 0;
@@ -140,36 +140,52 @@ function loadRainViewerFrames() {
     });
 }
 
-// Show a radar frame, with fade
+// Show a radar frame, with cross-fade
 function showRainViewerFrame(idx, immediate) {
-  // Remove old radar layers
-  radarLayers.forEach(layer => map.removeLayer(layer));
-  radarLayers = [];
+  // Keep up to 2 layers for cross-fade
+  if (radarLayers.length > 1) {
+    map.removeLayer(radarLayers.shift());
+  }
   currentFrame = idx;
 
-  // Add new radar layer for the selected frame
   const ts = radarTimestamps[idx];
   const tileUrl = `https://tilecache.rainviewer.com/v2/radar/${ts}/256/{z}/{x}/{y}/2/1_1.png`;
-  const radarLayer = L.tileLayer(tileUrl, {
+  const newLayer = L.tileLayer(tileUrl, {
     opacity: immediate ? 0.7 : 0,
     zIndex: 300,
     attribution: 'Radar &copy; RainViewer'
   });
-  radarLayer.addTo(map);
-  radarLayers.push(radarLayer);
+  newLayer.addTo(map);
+  radarLayers.push(newLayer);
 
-  // Fade in smoothly if not immediate
-  if (!immediate) {
+  // Cross-fade in
+  if (!immediate && radarLayers.length === 2) {
     let op = 0;
     const fade = setInterval(() => {
       op += 0.1;
       if (op >= 0.7) {
-        radarLayer.setOpacity(0.7);
+        newLayer.setOpacity(0.7);
+        radarLayers[0].setOpacity(0);
         clearInterval(fade);
+        // Remove the old layer after fade
+        setTimeout(() => {
+          if (radarLayers.length > 1) {
+            map.removeLayer(radarLayers.shift());
+          }
+        }, 100);
       } else {
-        radarLayer.setOpacity(op);
+        newLayer.setOpacity(op);
+        radarLayers[0].setOpacity(0.7 - op);
       }
     }, 30);
+  } else {
+    newLayer.setOpacity(0.7);
+    if (radarLayers.length > 1) radarLayers[0].setOpacity(0);
+    setTimeout(() => {
+      if (radarLayers.length > 1) {
+        map.removeLayer(radarLayers.shift());
+      }
+    }, 100);
   }
 }
 
@@ -204,7 +220,6 @@ function scheduleRainViewerRefresh() {
       .then(resp => resp.json())
       .then(data => {
         radarTimestamps = data.radar.past.map(frame => frame.time);
-        // Restart animation at latest frame
         currentFrame = 0;
         showRainViewerFrame(currentFrame, true);
       });
