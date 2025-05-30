@@ -1,4 +1,4 @@
-// Full NEXRAD site list (from your provided data)
+// Full NEXRAD site list (from your paste.txt)
 const NEXRAD_SITES = [
   {"id":"KABR","name":"Aberdeen, SD","lat":45.4558,"lon":-98.4131,"elevation":1302},
   {"id":"KENX","name":"Albany, NY","lat":42.5864,"lon":-74.0639,"elevation":1826},
@@ -57,6 +57,7 @@ const NEXRAD_SITES = [
   {"id":"KJAX","name":"Jacksonville, FL","lat":30.4847,"lon":-81.7011,"elevation":33},
   {"id":"KDGX","name":"Jackson, MS","lat":32.3203,"lon":-89.9842,"elevation":322},
   {"id":"KJKL","name":"Jackson, KY","lat":37.5908,"lon":-83.3131,"elevation":1360},
+  {"id":"KEAX","name":"Kansas City, MO","lat":38.8106,"lon":-94.2644,"elevation":1092},
   {"id":"KILX","name":"Lincoln, IL","lat":40.1503,"lon":-89.3383,"elevation":731},
   {"id":"KIND","name":"Indianapolis, IN","lat":39.7072,"lon":-86.2806,"elevation":797},
   {"id":"KGRK","name":"Fort Cavazos/Gray AAF, TX","lat":30.7218,"lon":-97.3828,"elevation":1020},
@@ -86,6 +87,7 @@ const NEXRAD_SITES = [
   {"id":"KPAH","name":"Paducah, KY","lat":37.0686,"lon":-88.7736,"elevation":410},
   {"id":"KPBZ","name":"Pittsburgh, PA","lat":40.5311,"lon":-80.2183,"elevation":1201},
   {"id":"KPDT","name":"Pendleton, OR","lat":45.6911,"lon":-118.8528,"elevation":1579},
+  {"id":"KPOE","name":"Fort Polk, LA","lat":31.1556,"lon":-92.9742,"elevation":407},
   {"id":"KPUX","name":"Pueblo, CO","lat":38.4597,"lon":-104.1806,"elevation":4737},
   {"id":"KRAX","name":"Raleigh/Durham, NC","lat":35.6653,"lon":-78.4911,"elevation":435},
   {"id":"KRGX","name":"Reno, NV","lat":39.7547,"lon":-119.4606,"elevation":8240},
@@ -96,6 +98,7 @@ const NEXRAD_SITES = [
   {"id":"KSGF","name":"Springfield, MO","lat":37.2356,"lon":-93.4006,"elevation":1378},
   {"id":"KSHV","name":"Shreveport, LA","lat":32.4497,"lon":-93.8417,"elevation":273},
   {"id":"KSIK","name":"Sikeston, MO","lat":36.7575,"lon":-89.1617,"elevation":312},
+  {"id":"KSRX","name":"Fort Smith, AR","lat":35.2894,"lon":-94.3611,"elevation":653},
   {"id":"KTBW","name":"Tampa Bay, FL","lat":27.7053,"lon":-82.4017,"elevation":42},
   {"id":"KTLH","name":"Tallahassee, FL","lat":30.3967,"lon":-84.3286,"elevation":125},
   {"id":"KTLX","name":"Oklahoma City/Norman, OK","lat":35.3331,"lon":-97.2775,"elevation":1198},
@@ -106,8 +109,31 @@ const NEXRAD_SITES = [
   {"id":"KVTX","name":"Los Angeles, CA","lat":34.4122,"lon":-119.1781,"elevation":2806},
   {"id":"KVWX","name":"Evansville, IN","lat":37.9342,"lon":-87.265,"elevation":459},
   {"id":"KYUX","name":"Yuma, AZ","lat":32.4958,"lon":-113.9025,"elevation":239}
-  // ...add any more as needed...
 ];
+
+// Radar product WMS layer mapping
+const PRODUCT_LAYERS = {
+  "conus_bref_qcd": {
+    label: "Base Reflectivity",
+    wmsLayer: "conus_bref_qcd"
+  },
+  "conus_cref_qcd": {
+    label: "Composite Reflectivity",
+    wmsLayer: "conus_cref_qcd"
+  },
+  "conus_bvel_qcd": {
+    label: "Base Velocity",
+    wmsLayer: "conus_bvel_qcd"
+  },
+  "conus_etop_qcd": {
+    label: "Echo Tops",
+    wmsLayer: "conus_etop_qcd"
+  },
+  "conus_vil_qcd": {
+    label: "Vertically Integrated Liquid",
+    wmsLayer: "conus_vil_qcd"
+  }
+};
 
 const map = L.map('map').setView([39.8283, -98.5795], 5);
 
@@ -116,13 +142,34 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap contributors'
 }).addTo(map);
 
-// NOAA NWS National Mosaic WMS (Base Reflectivity)
-const radarWMS = L.tileLayer.wms('https://opengeo.ncep.noaa.gov/geoserver/conus/conus_bref_qcd/ows?', {
-  layers: 'conus_bref_qcd',
-  format: 'image/png',
-  transparent: true,
-  attribution: 'NOAA/NWS'
-}).addTo(map);
+// Create the initial radar WMS layer (default: Base Reflectivity)
+let radarWMS = L.tileLayer.wms(
+  'https://opengeo.ncep.noaa.gov/geoserver/conus/conus_bref_qcd/ows?', {
+    layers: 'conus_bref_qcd',
+    format: 'image/png',
+    transparent: true,
+    attribution: 'NOAA/NWS'
+  }
+).addTo(map);
+
+// Function to update the radar product layer
+function updateRadarProduct() {
+  const prod = document.getElementById('productSelect').value;
+  if (radarWMS) map.removeLayer(radarWMS);
+
+  radarWMS = L.tileLayer.wms(
+    `https://opengeo.ncep.noaa.gov/geoserver/conus/${prod}/ows?`, {
+      layers: PRODUCT_LAYERS[prod].wmsLayer,
+      format: 'image/png',
+      transparent: true,
+      attribution: 'NOAA/NWS'
+    }
+  );
+  radarWMS.addTo(map);
+}
+
+// Listen for product dropdown changes
+document.getElementById('productSelect').addEventListener('change', updateRadarProduct);
 
 // Add NEXRAD site dots
 NEXRAD_SITES.forEach(site => {
@@ -142,7 +189,6 @@ NEXRAD_SITES.forEach(site => {
   marker.addTo(map);
 });
 
-// Populate dropdown
 function populateSiteSelect() {
   const sel = document.getElementById('siteSelect');
   NEXRAD_SITES.forEach(site => {
@@ -154,7 +200,6 @@ function populateSiteSelect() {
 }
 populateSiteSelect();
 
-// Zoom to site when button clicked
 document.getElementById('zoomToSite').onclick = () => {
   const siteId = document.getElementById('siteSelect').value;
   const site = NEXRAD_SITES.find(s => s.id === siteId);
@@ -163,7 +208,6 @@ document.getElementById('zoomToSite').onclick = () => {
   }
 };
 
-// Optionally, zoom to first site on load
 document.getElementById('siteSelect').selectedIndex = 0;
 const firstSite = NEXRAD_SITES[0];
 if (firstSite) {
