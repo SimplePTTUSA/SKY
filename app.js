@@ -111,14 +111,7 @@ const NEXRAD_SITES = [
   {"id":"KYUX","name":"Yuma, AZ","lat":32.4958,"lon":-113.9025,"elevation":239}
 ];
 
-// Radar product WMS layer mapping
-const PRODUCT_LAYERS = {
-  "conus_bref_qcd": { label: "Base Reflectivity", wmsLayer: "conus_bref_qcd" },
-  "conus_cref_qcd": { label: "Composite Reflectivity", wmsLayer: "conus_cref_qcd" },
-  "conus_bvel_qcd": { label: "Base Velocity", wmsLayer: "conus_bvel_qcd" },
-  "conus_etop_qcd": { label: "Echo Tops", wmsLayer: "conus_etop_qcd" },
-  "conus_vil_qcd": { label: "Vertically Integrated Liquid", wmsLayer: "conus_vil_qcd" }
-};
+// Your NEXRAD_SITES array here...
 
 const map = L.map('map').setView([39.8283, -98.5795], 5);
 
@@ -127,73 +120,66 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap contributors'
 }).addTo(map);
 
-// --- Radar WMS Layer Animation ---
-let radarWMS = null;
+// --- RainViewer Radar Animation ---
+let radarLayers = [];
+let radarTimestamps = [];
+let currentFrame = 0;
 let animationInterval = null;
 let animationActive = true;
-let frameIdx = 0;
-const MAX_FRAMES = 6; // Show last 6 frames (approx 30 min)
-let currentProduct = "conus_bref_qcd";
 
-// Helper to get WMS time string for the last N frames (approx every 5 min)
-function getWMSTimes() {
-  const now = new Date();
-  let times = [];
-  for (let i = MAX_FRAMES - 1; i >= 0; i--) {
-    let t = new Date(now.getTime() - i * 5 * 60 * 1000);
-    times.push(t.toISOString().replace(/[-:]/g, '').slice(0, 12) + '00');
-  }
-  return times;
+// Fetch available radar frames from RainViewer
+function loadRainViewerFrames() {
+  fetch('https://api.rainviewer.com/public/weather-maps.json')
+    .then(resp => resp.json())
+    .then(data => {
+      radarTimestamps = data.radar.past.map(frame => frame.time);
+      showRainViewerFrame(0);
+      startRainViewerAnimation();
+    });
 }
 
-function addRadarWMS(product, frameIdx = 0) {
-  if (radarWMS) map.removeLayer(radarWMS);
-  currentProduct = product;
-  const times = getWMSTimes();
-  radarWMS = L.tileLayer.wms(
-    `https://opengeo.ncep.noaa.gov/geoserver/conus/${product}/ows?`, {
-      layers: PRODUCT_LAYERS[product].wmsLayer,
-      format: 'image/png',
-      transparent: true,
-      attribution: 'NOAA/NWS',
-      time: times[frameIdx],
-      fake: Date.now() // cache buster
-    }
-  );
-  radarWMS.addTo(map);
+function showRainViewerFrame(idx) {
+  // Remove old radar layers
+  radarLayers.forEach(layer => map.removeLayer(layer));
+  radarLayers = [];
+  currentFrame = idx;
+
+  // Add new radar layer for the selected frame
+  const ts = radarTimestamps[idx];
+  const tileUrl = `https://tilecache.rainviewer.com/v2/radar/${ts}/256/{z}/{x}/{y}/2/1_1.png`;
+  const radarLayer = L.tileLayer(tileUrl, {
+    opacity: 0.7,
+    zIndex: 300,
+    attribution: 'Radar &copy; RainViewer'
+  });
+  radarLayer.addTo(map);
+  radarLayers.push(radarLayer);
 }
 
-function startAnimation() {
+function startRainViewerAnimation() {
   if (animationInterval) clearInterval(animationInterval);
   animationInterval = setInterval(() => {
-    frameIdx = (frameIdx + 1) % MAX_FRAMES;
-    addRadarWMS(currentProduct, frameIdx);
-  }, 900); // ~1 frame per second
+    currentFrame = (currentFrame + 1) % radarTimestamps.length;
+    showRainViewerFrame(currentFrame);
+  }, 900);
 }
 
-function stopAnimation() {
+function stopRainViewerAnimation() {
   if (animationInterval) clearInterval(animationInterval);
 }
-
-// --- Product dropdown logic ---
-document.getElementById('productSelect').addEventListener('change', function() {
-  currentProduct = this.value;
-  frameIdx = 0;
-  addRadarWMS(currentProduct, frameIdx);
-});
 
 // --- Animation toggle ---
 document.getElementById('toggleAnimation').addEventListener('click', function() {
   animationActive = !animationActive;
   this.textContent = animationActive ? "Pause Animation" : "Resume Animation";
   if (animationActive) {
-    startAnimation();
+    startRainViewerAnimation();
   } else {
-    stopAnimation();
+    stopRainViewerAnimation();
   }
 });
 
-// --- Add NEXRAD site dots ---
+// --- Add NEXRAD site dots (unchanged) ---
 NEXRAD_SITES.forEach(site => {
   const marker = L.circleMarker([site.lat, site.lon], {
     radius: 5,
@@ -211,7 +197,7 @@ NEXRAD_SITES.forEach(site => {
   marker.addTo(map);
 });
 
-// --- Populate dropdown ---
+// --- Populate dropdown (unchanged) ---
 function populateSiteSelect() {
   const sel = document.getElementById('siteSelect');
   NEXRAD_SITES.forEach(site => {
@@ -223,7 +209,6 @@ function populateSiteSelect() {
 }
 populateSiteSelect();
 
-// --- Zoom to site ---
 document.getElementById('zoomToSite').onclick = () => {
   const siteId = document.getElementById('siteSelect').value;
   const site = NEXRAD_SITES.find(s => s.id === siteId);
@@ -233,7 +218,7 @@ document.getElementById('siteSelect').selectedIndex = 0;
 const firstSite = NEXRAD_SITES[0];
 if (firstSite) map.setView([firstSite.lat, firstSite.lon], 8);
 
-// --- Weather Polygons (Tornado, Severe, SPC Discussion) ---
+// --- Weather Polygons (Tornado, Severe, SPC Discussion, unchanged) ---
 let warningLayers = [];
 async function loadPolygons() {
   // Remove old polygons
@@ -266,7 +251,6 @@ async function loadPolygons() {
   });
 
   // SPC Discussions (blue)
-  // SPC Mesoscale Discussions GeoJSON: https://www.spc.noaa.gov/products/md/active_md.json
   try {
     const spcResp = await fetch('https://www.spc.noaa.gov/products/md/active_md.json');
     if (spcResp.ok) {
@@ -290,13 +274,10 @@ async function loadPolygons() {
         });
       });
     }
-  } catch (e) {
-    // Ignore SPC errors
-  }
+  } catch (e) {}
 }
 loadPolygons();
 setInterval(loadPolygons, 60000); // Refresh polygons every minute
 
-// --- Start radar animation ---
-addRadarWMS(currentProduct, frameIdx);
-startAnimation();
+// --- Start RainViewer radar animation ---
+loadRainViewerFrames();
