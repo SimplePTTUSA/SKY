@@ -111,7 +111,7 @@ const NEXRAD_SITES = [
   {"id":"KYUX","name":"Yuma, AZ","lat":32.4958,"lon":-113.9025,"elevation":239}
 ];
 // Set initial map view to full USA
-const map = L.map('map').setView([39.8283, -98.5795], 4); // Zoom 4 shows the whole US
+const map = L.map('map').setView([39.8283, -98.5795], 4);
 
 // Optional: limit panning to US bounds
 const usBounds = [
@@ -121,37 +121,44 @@ const usBounds = [
 map.setMaxBounds(usBounds);
 
 // Base map
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}/.png', {
   attribution: '© OpenStreetMap contributors'
 }).addTo(map);
 
-// --- RainViewer Radar Animation (with cross-fade and auto-refresh) ---
+// --- RainViewer Radar Animation with Slider ---
 let radarLayers = [];
 let radarTimestamps = [];
 let currentFrame = 0;
 let animationInterval = null;
 let animationActive = true;
-let radarFrameInterval = 400; // ms for smoother animation
+let radarFrameInterval = 400;
 let rainViewerRefreshInterval = null;
 
-// Fetch available radar frames from RainViewer
+// Slider elements
+const frameSlider = document.getElementById('frameSlider');
+const frameNum = document.getElementById('frameNum');
+const frameTotal = document.getElementById('frameTotal');
+
+// Fetch radar frames
 function loadRainViewerFrames() {
   fetch('https://api.rainviewer.com/public/weather-maps.json')
     .then(resp => resp.json())
     .then(data => {
       radarTimestamps = data.radar.past.map(frame => frame.time);
+      frameSlider.max = radarTimestamps.length - 1;
+      frameSlider.value = 0;
+      frameTotal.textContent = radarTimestamps.length;
       showRainViewerFrame(0, true);
       startRainViewerAnimation();
     });
 }
 
-// Show a radar frame, with cross-fade
+// Show frame with cross-fade
 function showRainViewerFrame(idx, immediate) {
-  // Keep up to 2 layers for cross-fade
-  if (radarLayers.length > 1) {
-    map.removeLayer(radarLayers.shift());
-  }
+  if (radarLayers.length > 1) map.removeLayer(radarLayers.shift());
   currentFrame = idx;
+  frameSlider.value = idx;
+  frameNum.textContent = idx + 1;
 
   const ts = radarTimestamps[idx];
   const tileUrl = `https://tilecache.rainviewer.com/v2/radar/${ts}/256/{z}/{x}/{y}/2/1_1.png`;
@@ -163,7 +170,6 @@ function showRainViewerFrame(idx, immediate) {
   newLayer.addTo(map);
   radarLayers.push(newLayer);
 
-  // Cross-fade in
   if (!immediate && radarLayers.length === 2) {
     let op = 0;
     const fade = setInterval(() => {
@@ -172,12 +178,7 @@ function showRainViewerFrame(idx, immediate) {
         newLayer.setOpacity(0.7);
         radarLayers[0].setOpacity(0);
         clearInterval(fade);
-        // Remove the old layer after fade
-        setTimeout(() => {
-          if (radarLayers.length > 1) {
-            map.removeLayer(radarLayers.shift());
-          }
-        }, 100);
+        setTimeout(() => map.removeLayer(radarLayers.shift()), 100);
       } else {
         newLayer.setOpacity(op);
         radarLayers[0].setOpacity(0.7 - op);
@@ -187,13 +188,12 @@ function showRainViewerFrame(idx, immediate) {
     newLayer.setOpacity(0.7);
     if (radarLayers.length > 1) radarLayers[0].setOpacity(0);
     setTimeout(() => {
-      if (radarLayers.length > 1) {
-        map.removeLayer(radarLayers.shift());
-      }
+      if (radarLayers.length > 1) map.removeLayer(radarLayers.shift());
     }, 100);
   }
 }
 
+// Animation control
 function startRainViewerAnimation() {
   if (animationInterval) clearInterval(animationInterval);
   animationInterval = setInterval(() => {
@@ -206,32 +206,38 @@ function stopRainViewerAnimation() {
   if (animationInterval) clearInterval(animationInterval);
 }
 
-// --- Animation toggle ---
+// Slider interaction
+frameSlider.addEventListener('input', function() {
+  stopRainViewerAnimation();
+  animationActive = false;
+  document.getElementById('toggleAnimation').textContent = "Resume Animation";
+  showRainViewerFrame(Number(this.value), true);
+});
+
+// Toggle animation
 document.getElementById('toggleAnimation').addEventListener('click', function() {
   animationActive = !animationActive;
   this.textContent = animationActive ? "Pause Animation" : "Resume Animation";
-  if (animationActive) {
-    startRainViewerAnimation();
-  } else {
-    stopRainViewerAnimation();
-  }
+  if (animationActive) startRainViewerAnimation();
+  else stopRainViewerAnimation();
 });
 
-// --- Periodically refresh RainViewer frames every 60 seconds ---
+// Auto-refresh frames
 function scheduleRainViewerRefresh() {
-  if (rainViewerRefreshInterval) clearInterval(rainViewerRefreshInterval);
   rainViewerRefreshInterval = setInterval(() => {
     fetch('https://api.rainviewer.com/public/weather-maps.json')
       .then(resp => resp.json())
       .then(data => {
         radarTimestamps = data.radar.past.map(frame => frame.time);
+        frameSlider.max = radarTimestamps.length - 1;
+        frameTotal.textContent = radarTimestamps.length;
         currentFrame = 0;
         showRainViewerFrame(currentFrame, true);
       });
   }, 60000);
 }
 
-// --- Add NEXRAD site dots ---
+// --- NEXRAD Site Dots ---
 NEXRAD_SITES.forEach(site => {
   const marker = L.circleMarker([site.lat, site.lon], {
     radius: 5,
@@ -249,7 +255,7 @@ NEXRAD_SITES.forEach(site => {
   marker.addTo(map);
 });
 
-// --- Populate dropdown ---
+// Populate site dropdown
 function populateSiteSelect() {
   const sel = document.getElementById('siteSelect');
   NEXRAD_SITES.forEach(site => {
@@ -261,68 +267,53 @@ function populateSiteSelect() {
 }
 populateSiteSelect();
 
-// --- Zoom to site from dropdown ---
+// Zoom to site
 document.getElementById('zoomToSite').onclick = () => {
   const siteId = document.getElementById('siteSelect').value;
   const site = NEXRAD_SITES.find(s => s.id === siteId);
   if (site) map.setView([site.lat, site.lon], 8);
 };
 
-// --- Weather Polygons (Tornado, Severe, SPC Discussion) ---
+// --- Weather Polygons ---
 let warningLayers = [];
 let warningFeatures = [];
 async function loadPolygons() {
-  // Remove old polygons
   warningLayers.forEach(layer => map.removeLayer(layer));
   warningLayers = [];
   warningFeatures = [];
 
-  // NWS API for warnings
+  // NWS Warnings
   const resp = await fetch('https://api.weather.gov/alerts/active?status=actual&message_type=alert&event=Tornado%20Warning,Severe%20Thunderstorm%20Warning');
   const data = await resp.json();
   data.features.forEach(feature => {
-    if (!feature.geometry || !feature.geometry.coordinates) return;
-    let polygons = [];
-    if (feature.geometry.type === "Polygon") polygons = [feature.geometry.coordinates];
-    if (feature.geometry.type === "MultiPolygon") polygons = feature.geometry.coordinates;
+    if (!feature.geometry?.coordinates) return;
+    const polygons = feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates;
     polygons.forEach(polyCoords => {
       const latlngs = polyCoords.map(ring => ring.map(([lon, lat]) => [lat, lon]));
-      let color = "#ffe600", fillColor = "#ffe600", typeClass = "severe";
-      if (feature.properties.event === "Tornado Warning") {
-        color = fillColor = "#dc2626";
-        typeClass = "tornado";
-      }
+      const isTornado = feature.properties.event === "Tornado Warning";
+      const color = isTornado ? "#dc2626" : "#ffe600";
+      const typeClass = isTornado ? "tornado" : "severe";
       const popup = `<b>${feature.properties.event}</b><br>
         <b>Issued:</b> ${new Date(feature.properties.sent).toLocaleString()}<br>
         <b>Expires:</b> ${new Date(feature.properties.expires).toLocaleString()}<br>
         <b>Area:</b> ${feature.properties.areaDesc}<br>
         <b>Description:</b> ${feature.properties.headline || ""}<br>
         <b>Instructions:</b> ${feature.properties.instruction || ""}`;
-      const poly = L.polygon(latlngs, {
-        fillColor, fillOpacity: 0.23, color, weight: 2
-      }).bindPopup(popup).addTo(map);
+      const poly = L.polygon(latlngs, { fillColor: color, fillOpacity: 0.23, color, weight: 2 })
+        .bindPopup(popup).addTo(map);
       warningLayers.push(poly);
-      warningFeatures.push({
-        type: typeClass,
-        title: feature.properties.event,
-        area: feature.properties.areaDesc,
-        time: new Date(feature.properties.sent).toLocaleTimeString(),
-        popup,
-        layer: poly
-      });
+      warningFeatures.push({ type: typeClass, title: feature.properties.event, area: feature.properties.areaDesc, time: new Date(feature.properties.sent).toLocaleTimeString(), popup, layer: poly });
     });
   });
 
-  // SPC Discussions (pink)
+  // SPC Discussions
   try {
     const spcResp = await fetch('https://www.spc.noaa.gov/products/md/active_md.json');
     if (spcResp.ok) {
       const spcData = await spcResp.json();
       (spcData.features || []).forEach(feature => {
-        if (!feature.geometry || !feature.geometry.coordinates) return;
-        let polygons = [];
-        if (feature.geometry.type === "Polygon") polygons = [feature.geometry.coordinates];
-        if (feature.geometry.type === "MultiPolygon") polygons = feature.geometry.coordinates;
+        if (!feature.geometry?.coordinates) return;
+        const polygons = feature.geometry.type === "Polygon" ? [feature.geometry.coordinates] : feature.geometry.coordinates;
         polygons.forEach(polyCoords => {
           const latlngs = polyCoords.map(ring => ring.map(([lon, lat]) => [lat, lon]));
           const popup = `<b>SPC Mesoscale Discussion</b><br>
@@ -330,18 +321,10 @@ async function loadPolygons() {
             <b>Issued:</b> ${feature.properties.issue}<br>
             <b>Expires:</b> ${feature.properties.expire}<br>
             <b>Summary:</b> ${feature.properties.summary || ""}`;
-          const poly = L.polygon(latlngs, {
-            fillColor: "#e75480", fillOpacity: 0.18, color: "#e75480", weight: 2
-          }).bindPopup(popup).addTo(map);
+          const poly = L.polygon(latlngs, { fillColor: "#e75480", fillOpacity: 0.18, color: "#e75480", weight: 2 })
+            .bindPopup(popup).addTo(map);
           warningLayers.push(poly);
-          warningFeatures.push({
-            type: "spc",
-            title: "SPC Mesoscale Discussion",
-            area: feature.properties.mdnum,
-            time: feature.properties.issue,
-            popup,
-            layer: poly
-          });
+          warningFeatures.push({ type: "spc", title: "SPC Mesoscale Discussion", area: feature.properties.mdnum, time: feature.properties.issue, popup, layer: poly });
         });
       });
     }
@@ -349,14 +332,12 @@ async function loadPolygons() {
 
   updateWarningSidebar();
 }
-loadPolygons();
-setInterval(loadPolygons, 60000); // Refresh polygons every minute
 
-// --- Sidebar warning list ---
+// Update sidebar
 function updateWarningSidebar() {
   const list = document.getElementById('warningList');
   list.innerHTML = '';
-  warningFeatures.forEach((feat, i) => {
+  warningFeatures.forEach(feat => {
     const li = document.createElement('li');
     li.className = feat.type;
     li.innerHTML = `<b>${feat.title}</b><br><small>${feat.area}</small><br><small>${feat.time}</small>`;
@@ -368,12 +349,8 @@ function updateWarningSidebar() {
   });
 }
 
-// --- Start RainViewer radar animation and schedule refresh ---
-loadRainViewerFrames();
-scheduleRainViewerRefresh();
-
-
-
-// --- Start RainViewer radar animation and schedule refresh ---
+// Start everything
+loadPolygons();
+setInterval(loadPolygons, 60000);
 loadRainViewerFrames();
 scheduleRainViewerRefresh();
