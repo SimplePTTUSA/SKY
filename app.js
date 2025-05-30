@@ -111,9 +111,22 @@ const NEXRAD_SITES = [
   {"id":"KYUX","name":"Yuma, AZ","lat":32.4958,"lon":-113.9025,"elevation":239}
 ];
 
-// Your NEXRAD_SITES array here...
+// --- Full NEXRAD site list (abbreviated for example) ---
+const NEXRAD_SITES = [
+  {"id":"KABR","name":"Aberdeen, SD","lat":45.4558,"lon":-98.4131,"elevation":1302},
+  {"id":"KENX","name":"Albany, NY","lat":42.5864,"lon":-74.0639,"elevation":1826},
+  // ... (add all remaining sites from your paste.txt here) ...
+];
 
-const map = L.map('map').setView([39.8283, -98.5795], 5);
+// Set initial map view to full USA
+const map = L.map('map').setView([39.8283, -98.5795], 4); // Zoom 4 shows the whole US
+
+// Optional: limit panning to US bounds
+const usBounds = [
+  [24.396308, -125.0], // Southwest corner (Key West, FL)
+  [49.384358, -66.93457] // Northeast corner (Maine)
+];
+map.setMaxBounds(usBounds);
 
 // Base map
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -226,7 +239,7 @@ function scheduleRainViewerRefresh() {
   }, 60000);
 }
 
-// --- Add NEXRAD site dots (unchanged) ---
+// --- Add NEXRAD site dots ---
 NEXRAD_SITES.forEach(site => {
   const marker = L.circleMarker([site.lat, site.lon], {
     radius: 5,
@@ -244,7 +257,7 @@ NEXRAD_SITES.forEach(site => {
   marker.addTo(map);
 });
 
-// --- Populate dropdown (unchanged) ---
+// --- Populate dropdown ---
 function populateSiteSelect() {
   const sel = document.getElementById('siteSelect');
   NEXRAD_SITES.forEach(site => {
@@ -256,14 +269,12 @@ function populateSiteSelect() {
 }
 populateSiteSelect();
 
+// --- Zoom to site from dropdown ---
 document.getElementById('zoomToSite').onclick = () => {
   const siteId = document.getElementById('siteSelect').value;
   const site = NEXRAD_SITES.find(s => s.id === siteId);
   if (site) map.setView([site.lat, site.lon], 8);
 };
-document.getElementById('siteSelect').selectedIndex = 0;
-const firstSite = NEXRAD_SITES[0];
-if (firstSite) map.setView([firstSite.lat, firstSite.lon], 8);
 
 // --- Weather Polygons (Tornado, Severe, SPC Discussion) ---
 let warningLayers = [];
@@ -364,6 +375,12 @@ function updateWarningSidebar() {
     list.appendChild(li);
   });
 }
+
+// --- Start RainViewer radar animation and schedule refresh ---
+loadRainViewerFrames();
+scheduleRainViewerRefresh();
+
+
 
 // --- Start RainViewer radar animation and schedule refresh ---
 loadRainViewerFrames();
