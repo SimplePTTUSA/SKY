@@ -218,12 +218,14 @@ document.getElementById('siteSelect').selectedIndex = 0;
 const firstSite = NEXRAD_SITES[0];
 if (firstSite) map.setView([firstSite.lat, firstSite.lon], 8);
 
-// --- Weather Polygons (Tornado, Severe, SPC Discussion, unchanged) ---
+// --- Weather Polygons (Tornado, Severe, SPC Discussion) ---
 let warningLayers = [];
+let warningFeatures = [];
 async function loadPolygons() {
   // Remove old polygons
   warningLayers.forEach(layer => map.removeLayer(layer));
   warningLayers = [];
+  warningFeatures = [];
 
   // NWS API for warnings
   const resp = await fetch('https://api.weather.gov/alerts/active?status=actual&message_type=alert&event=Tornado%20Warning,Severe%20Thunderstorm%20Warning');
@@ -235,8 +237,11 @@ async function loadPolygons() {
     if (feature.geometry.type === "MultiPolygon") polygons = feature.geometry.coordinates;
     polygons.forEach(polyCoords => {
       const latlngs = polyCoords.map(ring => ring.map(([lon, lat]) => [lat, lon]));
-      let color = "#ffe600", fillColor = "#ffe600";
-      if (feature.properties.event === "Tornado Warning") color = fillColor = "#dc2626";
+      let color = "#ffe600", fillColor = "#ffe600", typeClass = "severe";
+      if (feature.properties.event === "Tornado Warning") {
+        color = fillColor = "#dc2626";
+        typeClass = "tornado";
+      }
       const popup = `<b>${feature.properties.event}</b><br>
         <b>Issued:</b> ${new Date(feature.properties.sent).toLocaleString()}<br>
         <b>Expires:</b> ${new Date(feature.properties.expires).toLocaleString()}<br>
@@ -247,10 +252,18 @@ async function loadPolygons() {
         fillColor, fillOpacity: 0.23, color, weight: 2
       }).bindPopup(popup).addTo(map);
       warningLayers.push(poly);
+      warningFeatures.push({
+        type: typeClass,
+        title: feature.properties.event,
+        area: feature.properties.areaDesc,
+        time: new Date(feature.properties.sent).toLocaleTimeString(),
+        popup,
+        layer: poly
+      });
     });
   });
 
-  // SPC Discussions (blue)
+  // SPC Discussions (pink)
   try {
     const spcResp = await fetch('https://www.spc.noaa.gov/products/md/active_md.json');
     if (spcResp.ok) {
@@ -268,16 +281,42 @@ async function loadPolygons() {
             <b>Expires:</b> ${feature.properties.expire}<br>
             <b>Summary:</b> ${feature.properties.summary || ""}`;
           const poly = L.polygon(latlngs, {
-            fillColor: "#2196f3", fillOpacity: 0.18, color: "#2196f3", weight: 2
+            fillColor: "#e75480", fillOpacity: 0.18, color: "#e75480", weight: 2
           }).bindPopup(popup).addTo(map);
           warningLayers.push(poly);
+          warningFeatures.push({
+            type: "spc",
+            title: "SPC Mesoscale Discussion",
+            area: feature.properties.mdnum,
+            time: feature.properties.issue,
+            popup,
+            layer: poly
+          });
         });
       });
     }
   } catch (e) {}
+
+  updateWarningSidebar();
 }
 loadPolygons();
 setInterval(loadPolygons, 60000); // Refresh polygons every minute
+
+// --- Sidebar warning list ---
+function updateWarningSidebar() {
+  const list = document.getElementById('warningList');
+  list.innerHTML = '';
+  warningFeatures.forEach((feat, i) => {
+    const li = document.createElement('li');
+    li.className = feat.type;
+    li.innerHTML = `<b>${feat.title}</b><br><small>${feat.area}</small><br><small>${feat.time}</small>`;
+    li.onclick = () => {
+      map.fitBounds(feat.layer.getBounds());
+      feat.layer.openPopup();
+    };
+    list.appendChild(li);
+  });
+}
 
 // --- Start RainViewer radar animation ---
 loadRainViewerFrames();
