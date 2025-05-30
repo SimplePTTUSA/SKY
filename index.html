@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NEXRAD Level III Radar Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <!-- Add CDN for nexrad-level-3-data and nexrad-level-3-plot -->
+  <script src="https://unpkg.com/nexrad-level-3-data@1.1.1/dist/nexrad-level-3-data.umd.js"></script>
+  <script src="https://unpkg.com/nexrad-level-3-plot@1.0.2/dist/nexrad-level-3-plot.umd.js"></script>
+</head>
+<body>
+  <div class="controls">
+    <label>Radar Site:
+      <select id="siteSelect"></select>
+    </label>
+    <label>Product:
+      <select id="productSelect">
+        <option value="N0Q">Base Reflectivity (N0Q)</option>
+        <option value="N0U">Base Velocity (N0U)</option>
+        <option value="N0S">Storm Relative Motion (N0S)</option>
+        <option value="N1P">1-Hour Precip (N1P)</option>
+        <option value="NTP">Storm Total Precip (NTP)</option>
+      </select>
+    </label>
+    <button id="loadRadar">Load Radar</button>
+  </div>
+  <div id="map"></div>
+  <!-- Canvas for radar rendering (hidden, used for overlay) -->
+  <canvas id="radarCanvas" width="600" height="600" style="display:none"></canvas>
+  <script src="app.js"></script>
+</body>
+</html>
