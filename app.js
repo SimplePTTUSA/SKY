@@ -112,27 +112,19 @@ const NEXRAD_SITES = [
 ];
 
 // Radar product WMS layer mapping
+const NEXRAD_SITES = [
+  {"id":"KABR","name":"Aberdeen, SD","lat":45.4558,"lon":-98.4131,"elevation":1302},
+  {"id":"KENX","name":"Albany, NY","lat":42.5864,"lon":-74.0639,"elevation":1826},
+  // ... (add all remaining sites from your paste.txt here) ...
+];
+
+// Radar product WMS layer mapping
 const PRODUCT_LAYERS = {
-  "conus_bref_qcd": {
-    label: "Base Reflectivity",
-    wmsLayer: "conus_bref_qcd"
-  },
-  "conus_cref_qcd": {
-    label: "Composite Reflectivity",
-    wmsLayer: "conus_cref_qcd"
-  },
-  "conus_bvel_qcd": {
-    label: "Base Velocity",
-    wmsLayer: "conus_bvel_qcd"
-  },
-  "conus_etop_qcd": {
-    label: "Echo Tops",
-    wmsLayer: "conus_etop_qcd"
-  },
-  "conus_vil_qcd": {
-    label: "Vertically Integrated Liquid",
-    wmsLayer: "conus_vil_qcd"
-  }
+  "conus_bref_qcd": { label: "Base Reflectivity", wmsLayer: "conus_bref_qcd" },
+  "conus_cref_qcd": { label: "Composite Reflectivity", wmsLayer: "conus_cref_qcd" },
+  "conus_bvel_qcd": { label: "Base Velocity", wmsLayer: "conus_bvel_qcd" },
+  "conus_etop_qcd": { label: "Echo Tops", wmsLayer: "conus_etop_qcd" },
+  "conus_vil_qcd": { label: "Vertically Integrated Liquid", wmsLayer: "conus_vil_qcd" }
 };
 
 const map = L.map('map').setView([39.8283, -98.5795], 5);
@@ -142,36 +134,73 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap contributors'
 }).addTo(map);
 
-// Create the initial radar WMS layer (default: Base Reflectivity)
-let radarWMS = L.tileLayer.wms(
-  'https://opengeo.ncep.noaa.gov/geoserver/conus/conus_bref_qcd/ows?', {
-    layers: 'conus_bref_qcd',
-    format: 'image/png',
-    transparent: true,
-    attribution: 'NOAA/NWS'
+// --- Radar WMS Layer Animation ---
+let radarWMS = null;
+let animationInterval = null;
+let animationActive = true;
+let frameIdx = 0;
+const MAX_FRAMES = 6; // Show last 6 frames (approx 30 min)
+let currentProduct = "conus_bref_qcd";
+
+// Helper to get WMS time string for the last N frames (approx every 5 min)
+function getWMSTimes() {
+  const now = new Date();
+  let times = [];
+  for (let i = MAX_FRAMES - 1; i >= 0; i--) {
+    let t = new Date(now.getTime() - i * 5 * 60 * 1000);
+    times.push(t.toISOString().replace(/[-:]/g, '').slice(0, 12) + '00');
   }
-).addTo(map);
+  return times;
+}
 
-// Function to update the radar product layer
-function updateRadarProduct() {
-  const prod = document.getElementById('productSelect').value;
+function addRadarWMS(product, frameIdx = 0) {
   if (radarWMS) map.removeLayer(radarWMS);
-
+  currentProduct = product;
+  const times = getWMSTimes();
   radarWMS = L.tileLayer.wms(
-    `https://opengeo.ncep.noaa.gov/geoserver/conus/${prod}/ows?`, {
-      layers: PRODUCT_LAYERS[prod].wmsLayer,
+    `https://opengeo.ncep.noaa.gov/geoserver/conus/${product}/ows?`, {
+      layers: PRODUCT_LAYERS[product].wmsLayer,
       format: 'image/png',
       transparent: true,
-      attribution: 'NOAA/NWS'
+      attribution: 'NOAA/NWS',
+      time: times[frameIdx],
+      fake: Date.now() // cache buster
     }
   );
   radarWMS.addTo(map);
 }
 
-// Listen for product dropdown changes
-document.getElementById('productSelect').addEventListener('change', updateRadarProduct);
+function startAnimation() {
+  if (animationInterval) clearInterval(animationInterval);
+  animationInterval = setInterval(() => {
+    frameIdx = (frameIdx + 1) % MAX_FRAMES;
+    addRadarWMS(currentProduct, frameIdx);
+  }, 900); // ~1 frame per second
+}
 
-// Add NEXRAD site dots
+function stopAnimation() {
+  if (animationInterval) clearInterval(animationInterval);
+}
+
+// --- Product dropdown logic ---
+document.getElementById('productSelect').addEventListener('change', function() {
+  currentProduct = this.value;
+  frameIdx = 0;
+  addRadarWMS(currentProduct, frameIdx);
+});
+
+// --- Animation toggle ---
+document.getElementById('toggleAnimation').addEventListener('click', function() {
+  animationActive = !animationActive;
+  this.textContent = animationActive ? "Pause Animation" : "Resume Animation";
+  if (animationActive) {
+    startAnimation();
+  } else {
+    stopAnimation();
+  }
+});
+
+// --- Add NEXRAD site dots ---
 NEXRAD_SITES.forEach(site => {
   const marker = L.circleMarker([site.lat, site.lon], {
     radius: 5,
@@ -189,6 +218,7 @@ NEXRAD_SITES.forEach(site => {
   marker.addTo(map);
 });
 
+// --- Populate dropdown ---
 function populateSiteSelect() {
   const sel = document.getElementById('siteSelect');
   NEXRAD_SITES.forEach(site => {
@@ -200,16 +230,80 @@ function populateSiteSelect() {
 }
 populateSiteSelect();
 
+// --- Zoom to site ---
 document.getElementById('zoomToSite').onclick = () => {
   const siteId = document.getElementById('siteSelect').value;
   const site = NEXRAD_SITES.find(s => s.id === siteId);
-  if (site) {
-    map.setView([site.lat, site.lon], 8);
-  }
+  if (site) map.setView([site.lat, site.lon], 8);
 };
-
 document.getElementById('siteSelect').selectedIndex = 0;
 const firstSite = NEXRAD_SITES[0];
-if (firstSite) {
-  map.setView([firstSite.lat, firstSite.lon], 8);
+if (firstSite) map.setView([firstSite.lat, firstSite.lon], 8);
+
+// --- Weather Polygons (Tornado, Severe, SPC Discussion) ---
+let warningLayers = [];
+async function loadPolygons() {
+  // Remove old polygons
+  warningLayers.forEach(layer => map.removeLayer(layer));
+  warningLayers = [];
+
+  // NWS API for warnings
+  const resp = await fetch('https://api.weather.gov/alerts/active?status=actual&message_type=alert&event=Tornado%20Warning,Severe%20Thunderstorm%20Warning');
+  const data = await resp.json();
+  data.features.forEach(feature => {
+    if (!feature.geometry || !feature.geometry.coordinates) return;
+    let polygons = [];
+    if (feature.geometry.type === "Polygon") polygons = [feature.geometry.coordinates];
+    if (feature.geometry.type === "MultiPolygon") polygons = feature.geometry.coordinates;
+    polygons.forEach(polyCoords => {
+      const latlngs = polyCoords.map(ring => ring.map(([lon, lat]) => [lat, lon]));
+      let color = "#ffe600", fillColor = "#ffe600";
+      if (feature.properties.event === "Tornado Warning") color = fillColor = "#dc2626";
+      const popup = `<b>${feature.properties.event}</b><br>
+        <b>Issued:</b> ${new Date(feature.properties.sent).toLocaleString()}<br>
+        <b>Expires:</b> ${new Date(feature.properties.expires).toLocaleString()}<br>
+        <b>Area:</b> ${feature.properties.areaDesc}<br>
+        <b>Description:</b> ${feature.properties.headline || ""}<br>
+        <b>Instructions:</b> ${feature.properties.instruction || ""}`;
+      const poly = L.polygon(latlngs, {
+        fillColor, fillOpacity: 0.23, color, weight: 2
+      }).bindPopup(popup).addTo(map);
+      warningLayers.push(poly);
+    });
+  });
+
+  // SPC Discussions (blue)
+  // SPC Mesoscale Discussions GeoJSON: https://www.spc.noaa.gov/products/md/active_md.json
+  try {
+    const spcResp = await fetch('https://www.spc.noaa.gov/products/md/active_md.json');
+    if (spcResp.ok) {
+      const spcData = await spcResp.json();
+      (spcData.features || []).forEach(feature => {
+        if (!feature.geometry || !feature.geometry.coordinates) return;
+        let polygons = [];
+        if (feature.geometry.type === "Polygon") polygons = [feature.geometry.coordinates];
+        if (feature.geometry.type === "MultiPolygon") polygons = feature.geometry.coordinates;
+        polygons.forEach(polyCoords => {
+          const latlngs = polyCoords.map(ring => ring.map(([lon, lat]) => [lat, lon]));
+          const popup = `<b>SPC Mesoscale Discussion</b><br>
+            <b>ID:</b> ${feature.properties.mdnum}<br>
+            <b>Issued:</b> ${feature.properties.issue}<br>
+            <b>Expires:</b> ${feature.properties.expire}<br>
+            <b>Summary:</b> ${feature.properties.summary || ""}`;
+          const poly = L.polygon(latlngs, {
+            fillColor: "#2196f3", fillOpacity: 0.18, color: "#2196f3", weight: 2
+          }).bindPopup(popup).addTo(map);
+          warningLayers.push(poly);
+        });
+      });
+    }
+  } catch (e) {
+    // Ignore SPC errors
+  }
 }
+loadPolygons();
+setInterval(loadPolygons, 60000); // Refresh polygons every minute
+
+// --- Start radar animation ---
+addRadarWMS(currentProduct, frameIdx);
+startAnimation();
