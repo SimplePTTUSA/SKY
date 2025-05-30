@@ -120,12 +120,14 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap contributors'
 }).addTo(map);
 
-// --- RainViewer Radar Animation ---
+// --- RainViewer Radar Animation (with fade and auto-refresh) ---
 let radarLayers = [];
 let radarTimestamps = [];
 let currentFrame = 0;
 let animationInterval = null;
 let animationActive = true;
+let radarFrameInterval = 400; // ms for smoother animation
+let rainViewerRefreshInterval = null;
 
 // Fetch available radar frames from RainViewer
 function loadRainViewerFrames() {
@@ -133,12 +135,13 @@ function loadRainViewerFrames() {
     .then(resp => resp.json())
     .then(data => {
       radarTimestamps = data.radar.past.map(frame => frame.time);
-      showRainViewerFrame(0);
+      showRainViewerFrame(0, true);
       startRainViewerAnimation();
     });
 }
 
-function showRainViewerFrame(idx) {
+// Show a radar frame, with fade
+function showRainViewerFrame(idx, immediate) {
   // Remove old radar layers
   radarLayers.forEach(layer => map.removeLayer(layer));
   radarLayers = [];
@@ -148,20 +151,34 @@ function showRainViewerFrame(idx) {
   const ts = radarTimestamps[idx];
   const tileUrl = `https://tilecache.rainviewer.com/v2/radar/${ts}/256/{z}/{x}/{y}/2/1_1.png`;
   const radarLayer = L.tileLayer(tileUrl, {
-    opacity: 0.7,
+    opacity: immediate ? 0.7 : 0,
     zIndex: 300,
     attribution: 'Radar &copy; RainViewer'
   });
   radarLayer.addTo(map);
   radarLayers.push(radarLayer);
+
+  // Fade in smoothly if not immediate
+  if (!immediate) {
+    let op = 0;
+    const fade = setInterval(() => {
+      op += 0.1;
+      if (op >= 0.7) {
+        radarLayer.setOpacity(0.7);
+        clearInterval(fade);
+      } else {
+        radarLayer.setOpacity(op);
+      }
+    }, 30);
+  }
 }
 
 function startRainViewerAnimation() {
   if (animationInterval) clearInterval(animationInterval);
   animationInterval = setInterval(() => {
     currentFrame = (currentFrame + 1) % radarTimestamps.length;
-    showRainViewerFrame(currentFrame);
-  }, 900);
+    showRainViewerFrame(currentFrame, false);
+  }, radarFrameInterval);
 }
 
 function stopRainViewerAnimation() {
@@ -178,6 +195,21 @@ document.getElementById('toggleAnimation').addEventListener('click', function() 
     stopRainViewerAnimation();
   }
 });
+
+// --- Periodically refresh RainViewer frames every 60 seconds ---
+function scheduleRainViewerRefresh() {
+  if (rainViewerRefreshInterval) clearInterval(rainViewerRefreshInterval);
+  rainViewerRefreshInterval = setInterval(() => {
+    fetch('https://api.rainviewer.com/public/weather-maps.json')
+      .then(resp => resp.json())
+      .then(data => {
+        radarTimestamps = data.radar.past.map(frame => frame.time);
+        // Restart animation at latest frame
+        currentFrame = 0;
+        showRainViewerFrame(currentFrame, true);
+      });
+  }, 60000);
+}
 
 // --- Add NEXRAD site dots (unchanged) ---
 NEXRAD_SITES.forEach(site => {
@@ -318,5 +350,6 @@ function updateWarningSidebar() {
   });
 }
 
-// --- Start RainViewer radar animation ---
+// --- Start RainViewer radar animation and schedule refresh ---
 loadRainViewerFrames();
+scheduleRainViewerRefresh();
