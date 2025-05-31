@@ -121,7 +121,7 @@ const usBounds = [
 map.setMaxBounds(usBounds);
 
 // Base map
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}/.png', {
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap contributors'
 }).addTo(map);
 
